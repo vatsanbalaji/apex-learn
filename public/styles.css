@@ -1,0 +1,35 @@
+/* Apex Learn — reuses the research app's dark/teal visual identity,
+   simplified for an educational product (less dense, more whitespace). */
+:root {
+  --bg: #0b1220; --panel: #121a2b; --panel2: #16213a; --border: #233150;
+  --text: #e8edf7; --muted: #8fa0c0; --accent: #35d08f; --accent2: #4f9bff;
+  --danger: #ff6b6b; --warn: #ffb020;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; }
+.wrap { max-width: 920px; margin: 0 auto; padding: 24px 20px 60px; }
+h1, h2, h3 { font-weight: 800; letter-spacing: -0.01em; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+.btn { background: var(--accent); color: #06231a; font-weight: 700; border: none; border-radius: 10px; padding: 10px 18px; cursor: pointer; font-size: 14px; }
+.btn.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+input { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 10px 12px; width: 100%; margin-bottom: 10px; font-size: 14px; }
+.muted { color: var(--muted); font-size: 13px; }
+.module-list { display: flex; flex-direction: column; gap: 10px; }
+.module-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: var(--panel2); border-radius: 10px; border: 1px solid var(--border); }
+.badge { font-size: 12px; padding: 3px 9px; border-radius: 999px; font-weight: 700; }
+.badge.completed { background: rgba(53,208,143,0.18); color: var(--accent); }
+.badge.in_progress { background: rgba(79,155,255,0.18); color: var(--accent2); }
+.badge.not_started { background: rgba(143,160,192,0.15); color: var(--muted); }
+.badge.coming_soon { background: rgba(255,176,32,0.15); color: var(--warn); }
+.progress-track { height: 8px; background: var(--panel2); border-radius: 999px; overflow: hidden; margin: 10px 0; }
+.progress-fill { height: 100%; background: var(--accent); }
+.alloc-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.alloc-row label { width: 70px; font-weight: 700; }
+.alloc-row input[type=range] { flex: 1; }
+.alloc-row .pct { width: 48px; text-align: right; }
+.hidden { display: none !important; }
+.step-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--border); margin-right: 4px; }
+.step-dot.active { background: var(--accent); }
+.disclaimer { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
+a.link { color: var(--accent2); cursor: pointer; }

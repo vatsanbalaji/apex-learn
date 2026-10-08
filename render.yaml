@@ -1,0 +1,21 @@
+# Render Blueprint for Apex Learn (separate service from the Apex research app).
+# SQLite needs a persistent disk, which requires a paid instance type.
+services:
+  - type: web
+    name: apex-learn
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DB_PATH
+        value: /var/data/apex-learn.db
+    disk:
+      name: apex-learn-data
+      mountPath: /var/data
+      sizeGB: 1

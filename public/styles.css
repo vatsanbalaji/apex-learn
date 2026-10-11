@@ -1,35 +1,77 @@
-/* Apex Learn — reuses the research app's dark/teal visual identity,
-   simplified for an educational product (less dense, more whitespace). */
-:root {
-  --bg: #0b1220; --panel: #121a2b; --panel2: #16213a; --border: #233150;
-  --text: #e8edf7; --muted: #8fa0c0; --accent: #35d08f; --accent2: #4f9bff;
-  --danger: #ff6b6b; --warn: #ffb020;
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; }
-.wrap { max-width: 920px; margin: 0 auto; padding: 24px 20px 60px; }
-h1, h2, h3 { font-weight: 800; letter-spacing: -0.01em; }
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
-.btn { background: var(--accent); color: #06231a; font-weight: 700; border: none; border-radius: 10px; padding: 10px 18px; cursor: pointer; font-size: 14px; }
-.btn.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-input { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 10px 12px; width: 100%; margin-bottom: 10px; font-size: 14px; }
-.muted { color: var(--muted); font-size: 13px; }
-.module-list { display: flex; flex-direction: column; gap: 10px; }
-.module-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: var(--panel2); border-radius: 10px; border: 1px solid var(--border); }
-.badge { font-size: 12px; padding: 3px 9px; border-radius: 999px; font-weight: 700; }
-.badge.completed { background: rgba(53,208,143,0.18); color: var(--accent); }
-.badge.in_progress { background: rgba(79,155,255,0.18); color: var(--accent2); }
-.badge.not_started { background: rgba(143,160,192,0.15); color: var(--muted); }
-.badge.coming_soon { background: rgba(255,176,32,0.15); color: var(--warn); }
-.progress-track { height: 8px; background: var(--panel2); border-radius: 999px; overflow: hidden; margin: 10px 0; }
-.progress-fill { height: 100%; background: var(--accent); }
-.alloc-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.alloc-row label { width: 70px; font-weight: 700; }
-.alloc-row input[type=range] { flex: 1; }
-.alloc-row .pct { width: 48px; text-align: right; }
-.hidden { display: none !important; }
-.step-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--border); margin-right: 4px; }
-.step-dot.active { background: var(--accent); }
-.disclaimer { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
-a.link { color: var(--accent2); cursor: pointer; }
+/* Apex Learn — same visual identity as the Apex Markets research app
+   (near-black #080808, green #00e676 accent, Inter + JetBrains Mono),
+   with airier spacing and larger text for a learning audience. */
+:root{--bg:#080808;--card:#0c0c0c;--card2:#101010;--line:#161616;--line2:#222;--text:#e2e2e2;--muted:#7a7a7a;--dim:#4a4a4a;--green:#00e676;--green2:#00b359;--red:#ff5252;--amber:#ffb300;--blue:#4da3ff}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:16px;line-height:1.6;min-height:100%}
+body{background:radial-gradient(ellipse at 20% -10%,#0a1a0d 0%,var(--bg) 55%) fixed}
+.mono{font-family:'JetBrains Mono',monospace}
+.pos{color:var(--green)!important}.neg{color:var(--red)!important}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:#222;border-radius:3px}
+.wrap{max-width:760px;margin:0 auto;padding:28px 18px 70px;animation:fadeUp .3s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.logo{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:26px;color:var(--green);letter-spacing:-1px;text-shadow:0 0 28px rgba(0,230,118,.3)}
+.logo small{display:block;font-family:Inter;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);text-shadow:none;font-weight:600;margin-top:2px}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}
+h1{font-size:28px;font-weight:800;letter-spacing:-.5px;margin-bottom:6px}
+h2{font-size:22px;font-weight:800;letter-spacing:-.3px;margin-bottom:12px}
+h3{font-size:16px;font-weight:700;margin-bottom:8px}
+p{margin-bottom:12px;color:#cfcfcf}
+.muted{color:var(--muted);font-size:14px}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--green);font-weight:700;margin-bottom:8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:14px;transition:border-color .2s}
+.card.hl{border-color:#1e3a26}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.stat label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:6px}
+.stat .v{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700}
+.btn{background:var(--green);color:#000;border:none;border-radius:12px;padding:14px 22px;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.3px;transition:all .18s;box-shadow:0 4px 20px rgba(0,230,118,.15);min-height:46px}
+.btn:hover{background:#00ff84;transform:translateY(-1px);box-shadow:0 6px 28px rgba(0,230,118,.28)}
+.btn:disabled{background:#141f14;color:#2a3e2a;cursor:not-allowed;box-shadow:none;transform:none}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line2);box-shadow:none}
+.btn.ghost:hover{border-color:#333;background:#101010}
+.btn.white{background:#fff;color:#111;box-shadow:none}.btn.white:hover{background:#f2f2f2}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+input[type=text],input[type=email],input[type=password],select{width:100%;background:var(--card2);border:1px solid var(--line2);color:var(--text);border-radius:10px;padding:13px 14px;font-size:15px;margin-bottom:10px;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green2)}
+textarea{width:100%;background:var(--card2);border:1px solid var(--line2);color:var(--text);border-radius:10px;padding:12px 14px;font-size:15px;font-family:inherit;min-height:80px;margin-bottom:10px;resize:vertical}
+label.q{display:block;font-weight:600;margin:10px 0 6px}
+.mod{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 18px;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;transition:border-color .2s,transform .15s;cursor:pointer}
+.mod:hover{border-color:#2a4a33;transform:translateY(-1px)}
+.mod .n{font-family:'JetBrains Mono',monospace;color:var(--dim);font-size:13px;width:26px}
+.mod .t{flex:1}.mod .t b{display:block;font-size:16px}.mod .t span{font-size:13px;color:var(--muted)}
+.badge{font-size:11px;padding:4px 10px;border-radius:999px;font-weight:700;white-space:nowrap}
+.badge.completed{background:rgba(0,230,118,.12);color:var(--green)}
+.badge.in_progress{background:rgba(77,163,255,.12);color:var(--blue)}
+.badge.not_started{background:#141414;color:var(--muted)}
+.track{height:6px;background:#141414;border-radius:3px;overflow:hidden;margin:10px 0 4px}
+.fill{height:100%;background:linear-gradient(90deg,var(--green),var(--green2));border-radius:3px;transition:width .6s ease}
+.steps{display:flex;gap:6px;margin-bottom:18px}
+.steps i{flex:1;height:4px;border-radius:2px;background:#161616}
+.steps i.on{background:var(--green)}.steps i.cur{background:var(--green);box-shadow:0 0 10px rgba(0,230,118,.5)}
+.slider-row{display:grid;grid-template-columns:78px 1fr 54px;align-items:center;gap:12px;margin-bottom:10px}
+.slider-row b{font-family:'JetBrains Mono',monospace;font-size:13px}
+.slider-row span.val{text-align:right;font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--green)}
+input[type=range]{-webkit-appearance:none;width:100%;height:6px;border-radius:3px;background:#1a1a1a;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--green);cursor:pointer;box-shadow:0 0 10px rgba(0,230,118,.4)}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-radius:50%;background:var(--green);cursor:pointer}
+.opt{display:block;width:100%;text-align:left;background:var(--card2);border:1px solid var(--line2);color:var(--text);border-radius:12px;padding:14px 16px;margin-bottom:8px;font-size:15px;cursor:pointer;transition:all .15s;font-family:inherit}
+.opt:hover{border-color:#2a4a33}.opt.sel{border-color:var(--green);background:#0a140d}
+.chart{width:100%;height:170px;background:var(--card2);border:1px solid var(--line);border-radius:12px;margin:8px 0 14px}
+.bar{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:13px}
+.bar .lbl{width:120px;color:var(--muted)}
+.bar .b{height:14px;border-radius:4px;min-width:2px}
+.bar .num{font-family:'JetBrains Mono',monospace;font-size:13px;min-width:70px}
+.cite{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:10px;margin-top:14px;line-height:1.7}
+.cite a{color:var(--muted)}
+.disclaimer{font-size:12px;color:var(--dim);text-align:center;margin-top:26px;line-height:1.7}
+.callout{border-left:3px solid var(--green);background:#0a140d;padding:12px 16px;border-radius:0 10px 10px 0;margin:12px 0;color:#d6e8dc}
+.hidden{display:none!important}
+.link{color:var(--muted);cursor:pointer;font-size:13px;text-decoration:underline}
+.err{color:var(--red);font-size:13px;min-height:18px;margin-bottom:8px}
+#auth{max-width:420px;margin:7vh auto 0;text-align:center}
+#auth .card{padding:34px 28px;text-align:left}
+.divider{display:flex;align-items:center;gap:10px;color:var(--dim);font-size:11px;margin:14px 0}
+.divider:before,.divider:after{content:"";flex:1;height:1px;background:var(--line2)}
+@media(max-width:560px){.grid{grid-template-columns:1fr}.slider-row{grid-template-columns:62px 1fr 48px}.bar .lbl{width:84px}h1{font-size:24px}.card{padding:18px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

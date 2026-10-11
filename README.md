@@ -50,30 +50,22 @@ schema to add it.
 
 ## What's implemented right now
 
-- Sign up / log in / log out (session-based).
-- Student dashboard: modules completed, per-module status, simulations
-  completed count.
-- **One complete educational module end-to-end: Diversification.**
-  Learn (short explanation) → Try (build a portfolio allocation across 9
-  real-ish assets) → Results (what happened, concentration score) →
-  Explain (why, in plain language) → Reflect (two short free-text
-  questions) → Retry/Next.
-- Simulation engine: three pre-defined, labeled market scenarios (tech
-  selloff, energy shock, broad rally) scored against the user's actual
-  allocation, plus an equal-weight benchmark for comparison. This is
-  intentionally much simpler than the research app's live multi-minute
-  trading session — the teaching point is portfolio construction and
-  concentration, not order execution.
-- Product analytics events (`account_created`, `module_started`,
-  `module_completed`, `simulation_started`, `simulation_completed`,
-  `quiz_completed`, `user_returned`) logged to the `events` table.
-- The remaining 5 modules (Investing Basics, Risk and Return, Market
-  Volatility, Behavioral Biases, Long-Term Investing) exist as rows in the
-  `modules` table with `status: 'coming_soon'` — they show up on the
-  dashboard as locked/upcoming so the information architecture is visible,
-  but have no content yet.
-- Minimal cohort architecture: join-code endpoint + an instructor-only
-  aggregate completion report endpoint. No instructor UI yet.
+- **All six modules**, each running through one shared engine
+  (`public/app.js`) with content in `public/modules.js`: Learn -> Try ->
+  Results -> Explain -> Reflect -> Retry. Adding a module = adding one object
+  to `modules.js` (plus a row in the `modules` table).
+- Sign in with **Google** (set `GOOGLE_CLIENT_ID`), email/password, or
+  **continue as guest** (no sign-up wall).
+- Sessions stored in SQLite (survive restarts when the DB is on a persistent disk).
+- Dashboard with progress, per-module status, "continue" shortcut.
+- Theme matches the Apex Markets research app (near-black, green accent,
+  Inter + JetBrains Mono) with larger text and mobile-first layout.
+- Every Explain screen lists sources; all scenarios are labeled hypothetical.
+- Product analytics events, minimal cohort/join-code backend (no UI yet).
+
+Content sources: SEC Investor.gov, Dimensional, Tversky & Kahneman (1992),
+Barber & Odean (2000). **Have a teacher or finance professional review the
+content before using it in a course.**
 
 ## How to run it locally
 

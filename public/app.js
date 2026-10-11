@@ -1,267 +1,158 @@
 'use strict';
-// Apex Learn — single-file client app (same low-dependency approach as the
-// research platform's frontend, but entirely new code: no consent/survey UI).
+// Apex Learn engine: renders every module through one shared loop
+// (Learn -> Try -> Results -> Explain -> Reflect -> Retry). Content lives in modules.js.
 const app = document.getElementById('app');
-let ME = null;
+let ME = null, CFG = {}, cur = null, step = 0, tryState = null, lastResult = null;
+const STEPS = ['Learn', 'Try', 'Results', 'Explain', 'Reflect'];
+const DISCLAIMER = '<p class="disclaimer">Educational simulation only. Apex Learn uses no real money and gives no personalized financial advice. All scenarios are hypothetical and illustrate ideas; they do not predict markets.</p>';
 
-async function api(path, opts) {
+async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || 'Request failed');
-  return data;
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'Something went wrong. Please try again.');
+  return d;
 }
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const bar = n => `<div class="steps">${STEPS.map((_, i) => `<i class="${i < n ? 'on' : i === n ? 'cur' : ''}"></i>`).join('')}</div><div class="eyebrow">${STEPS[n]} · step ${n + 1} of 5</div>`;
 
-function h(html) { const d = document.createElement('div'); d.innerHTML = html; return d.firstElementChild; }
-
-// ───────────────────────────────────────────── AUTH SCREENS
-function renderAuth() {
-  app.innerHTML = `
-    <h1>Apex Learn</h1>
-    <p class="muted">Learn financial concepts by making decisions and seeing what happens — not by reading about them.</p>
-    <div class="card" id="auth-card">
-      <h3 id="auth-title">Sign in</h3>
-      <input id="auth-email" type="email" placeholder="Email">
-      <input id="auth-password" type="password" placeholder="Password (8+ characters)">
-      <input id="auth-name" type="text" placeholder="Display name (sign up only)" class="hidden">
-      <div id="auth-error" class="muted" style="color:var(--danger)"></div>
-      <button class="btn" id="auth-submit">Sign in</button>
-      <p class="muted">No account? <a class="link" id="auth-toggle">Create one</a></p>
-    </div>
-    <p class="disclaimer">Educational simulation only. Apex Learn does not provide real financial advice and does not use real money. All market scenarios are simulated for teaching purposes.</p>
-  `;
-  let mode = 'login';
-  const toggle = document.getElementById('auth-toggle');
-  const title = document.getElementById('auth-title');
-  const nameInput = document.getElementById('auth-name');
-  const submit = document.getElementById('auth-submit');
-  toggle.onclick = () => {
-    mode = mode === 'login' ? 'signup' : 'login';
-    title.textContent = mode === 'login' ? 'Sign in' : 'Create your account';
-    submit.textContent = mode === 'login' ? 'Sign in' : 'Create account';
-    toggle.textContent = mode === 'login' ? 'Create one' : 'Sign in instead';
-    nameInput.classList.toggle('hidden', mode === 'login');
-  };
-  submit.onclick = async () => {
-    const email = document.getElementById('auth-email').value.trim();
-    const password = document.getElementById('auth-password').value;
-    const displayName = document.getElementById('auth-name').value.trim();
-    const errEl = document.getElementById('auth-error');
-    errEl.textContent = '';
-    try {
-      const path = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
-      const data = await api(path, { method: 'POST', body: JSON.stringify({ email, password, displayName }) });
-      ME = data.user;
-      renderDashboard();
-    } catch (e) { errEl.textContent = e.message; }
-  };
-}
-
-// ───────────────────────────────────────────── DASHBOARD
-async function renderDashboard() {
-  app.innerHTML = `<p class="muted">Loading your dashboard…</p>`;
-  const data = await api('/api/dashboard');
-  const pct = data.modulesTotal ? Math.round((data.modulesCompleted / data.modulesTotal) * 100) : 0;
-  app.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <h1>Apex Learn</h1>
-      <a class="link muted" id="logout-link">Sign out</a>
-    </div>
-    <p class="muted">Welcome back${ME.displayName ? ', ' + ME.displayName : ''}.</p>
+// ───────── AUTH
+function renderAuth(msg) {
+  app.innerHTML = `<div id="auth"><div class="logo" style="margin-bottom:6px">APEX LEARN<small>Financial literacy, by doing</small></div>
+    <p class="muted" style="margin:10px 0 18px">Make decisions in safe simulations and see what happens. No real money.</p>
     <div class="card">
-      <h3>Progress: ${data.modulesCompleted} / ${data.modulesTotal} modules</h3>
-      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-      <div class="module-list">
-        ${data.modules.map(m => `
-          <div class="module-row">
-            <div>
-              <div><strong>${m.title}</strong></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <span class="badge ${m.status === 'coming_soon' ? 'coming_soon' : m.userStatus}">
-                ${m.status === 'coming_soon' ? 'coming soon' : m.userStatus.replace('_',' ')}
-              </span>
-              ${m.status === 'available' ? `<button class="btn secondary" data-module="${m.id}">${m.userStatus === 'completed' ? 'Retry' : 'Open'}</button>` : ''}
-            </div>
-          </div>
-        `).join('')}
-      </div>
-      <p class="muted" style="margin-top:14px">Simulations completed: ${data.simulationsCompleted}</p>
-    </div>
-    <p class="disclaimer">All amounts and portfolios on this platform are simulated for learning purposes. Nothing here is personalized financial advice.</p>
-  `;
-  document.getElementById('logout-link').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }); ME = null; renderAuth(); };
-  document.querySelectorAll('[data-module]').forEach(btn => {
-    btn.onclick = () => openModule(btn.getAttribute('data-module'));
-  });
+      <div id="g-slot"></div>
+      <button class="btn" id="guest" style="width:100%">Start now as a guest</button>
+      <div class="divider">or save your progress</div>
+      <h3 id="at">Sign in</h3>
+      <input id="em" type="email" placeholder="Email" autocomplete="email">
+      <input id="pw" type="password" placeholder="Password (8+ characters)" autocomplete="current-password">
+      <input id="nm" type="text" placeholder="First name (optional)" class="hidden">
+      <div class="err" id="err">${msg ? esc(msg) : ''}</div>
+      <button class="btn ghost" id="go" style="width:100%">Sign in</button>
+      <p class="muted" style="text-align:center;margin:12px 0 0"><a class="link" id="tg">Create an account instead</a></p>
+    </div>${DISCLAIMER}</div>`;
+  let mode = 'login';
+  $('tg').onclick = () => { mode = mode === 'login' ? 'signup' : 'login'; $('at').textContent = mode === 'login' ? 'Sign in' : 'Create your account'; $('go').textContent = mode === 'login' ? 'Sign in' : 'Create account'; $('tg').textContent = mode === 'login' ? 'Create an account instead' : 'Sign in instead'; $('nm').classList.toggle('hidden', mode === 'login'); };
+  const enter = async fn => { try { const d = await fn(); ME = d.user; renderDash(); } catch (e) { $('err').textContent = e.message; } };
+  $('guest').onclick = () => enter(() => api('/api/auth/guest', { method: 'POST' }));
+  $('go').onclick = () => enter(() => api(mode === 'login' ? '/api/auth/login' : '/api/auth/signup', { method: 'POST', body: JSON.stringify({ email: $('em').value.trim(), password: $('pw').value, displayName: $('nm').value.trim() }) }));
+  if (CFG.googleClientId) loadGoogle(enter);
+}
+function loadGoogle(enter) {
+  const init = () => {
+    google.accounts.id.initialize({ client_id: CFG.googleClientId, callback: resp => enter(() => api('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential: resp.credential }) })) });
+    google.accounts.id.renderButton($('g-slot'), { theme: 'filled_black', size: 'large', width: 330, text: 'continue_with' });
+    $('g-slot').style.cssText = 'display:flex;justify-content:center;margin-bottom:12px';
+  };
+  if (window.google && google.accounts) return init();
+  const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.onload = init; document.head.appendChild(s);
 }
 
-// ───────────────────────────────────────────── MODULE FLOW (Learn -> Try -> Results -> Explain -> Reflect -> Retry)
-const MODULE_CONTENT = {
-  diversification: {
-    title: 'Diversification',
-    learn: `Diversification means spreading your money across multiple, different investments rather than putting it all into one. The idea isn't to avoid risk entirely — it's to avoid being wiped out by any single bad outcome. When one holding drops sharply, a diversified portfolio feels it as a bruise; a concentrated one feels it as a break.`,
-    scenarios: [
-      { id: 'tech_selloff', label: 'A sharp tech sector selloff' },
-      { id: 'energy_shock', label: 'An energy price shock' },
-      { id: 'broad_rally', label: 'A broad market rally' },
-    ],
-  },
-};
-
-let currentModule = null, currentStep = 'learn', lastResult = null;
-
-function stepDots(active) {
-  const steps = ['learn','try','results','explain','reflect'];
-  return steps.map(s => `<span class="step-dot ${s===active?'active':''}"></span>`).join('');
+// ───────── DASHBOARD
+async function renderDash() {
+  const d = await api('/api/dashboard');
+  const pct = Math.round(d.modulesCompleted / d.modulesTotal * 100);
+  const next = d.modules.find(m => m.userStatus !== 'completed');
+  app.innerHTML = `<div class="topbar"><div class="logo">APEX LEARN</div><a class="link" id="out">${ME && ME.guest ? 'Leave guest session' : 'Sign out'}</a></div>
+    <h1>${ME && ME.displayName && !ME.guest ? 'Welcome back, ' + esc(ME.displayName) : 'Your learning path'}</h1>
+    <p class="muted">Six short modules. Each one: learn it, try it, see what happened, understand why.</p>
+    <div class="card hl"><div style="display:flex;justify-content:space-between"><b>${d.modulesCompleted} of ${d.modulesTotal} modules complete</b><span class="mono pos">${pct}%</span></div>
+      <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+      <p class="muted" style="margin:6px 0 0">${d.simulationsCompleted} simulation${d.simulationsCompleted === 1 ? '' : 's'} completed</p>
+      ${next ? `<div class="row"><button class="btn" id="cont">${next.userStatus === 'in_progress' ? 'Continue' : 'Start'}: ${esc(next.title)}</button></div>` : '<p class="pos" style="margin:10px 0 0"><b>You finished every module. Nicely done.</b></p>'}</div>
+    ${d.modules.map((m, i) => `<div class="mod" data-m="${m.id}" tabindex="0" role="button"><span class="n">${String(i + 1).padStart(2, '0')}</span><div class="t"><b>${esc(m.title)}</b><span>${esc(m.summary || '')}</span></div><span class="badge ${m.userStatus}">${m.userStatus === 'completed' ? '✓ done' : m.userStatus === 'in_progress' ? 'in progress' : 'start'}</span></div>`).join('')}
+    ${ME && ME.guest ? '<p class="muted" style="text-align:center;margin-top:14px">Guest progress is tied to this browser. Sign out and create an account to keep it anywhere.</p>' : ''}${DISCLAIMER}`;
+  $('out').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }); ME = null; renderAuth(); };
+  document.querySelectorAll('[data-m]').forEach(el => { const go = () => openModule(el.dataset.m); el.onclick = go; el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }; });
+  if ($('cont')) $('cont').onclick = () => openModule(next.id);
 }
 
-async function openModule(moduleId) {
-  currentModule = moduleId; currentStep = 'learn';
-  await api(`/api/modules/${moduleId}/start`, { method: 'POST' });
-  renderLearn();
-}
+// ───────── MODULE LOOP
+async function openModule(id) { cur = id; tryState = null; lastResult = null; await api(`/api/modules/${id}/start`, { method: 'POST' }); step = 0; render(); }
+function render() { window.scrollTo(0, 0); [renderLearn, renderTry, renderResults, renderExplain, renderReflect][step](); }
+const M = () => MODULES[cur];
+const nav = (back, label, enabled = true) => `<div class="row" style="margin-top:16px">${back ? '<button class="btn ghost" id="bk">Back</button>' : '<button class="btn ghost" id="bk">Dashboard</button>'}<button class="btn" id="nx" ${enabled ? '' : 'disabled'}>${label}</button></div>`;
+function wire(onBack, onNext) { $('bk').onclick = onBack; $('nx').onclick = onNext; }
 
 function renderLearn() {
-  const content = MODULE_CONTENT[currentModule];
-  app.innerHTML = `
-    <div class="card">
-      ${stepDots('learn')}
-      <h2>${content.title}</h2>
-      <p>${content.learn}</p>
-      <button class="btn" id="to-try">Try it →</button>
-      <button class="btn secondary" id="back-dash">Back to dashboard</button>
-    </div>
-  `;
-  document.getElementById('to-try').onclick = renderTry;
-  document.getElementById('back-dash').onclick = renderDashboard;
+  const m = M();
+  app.innerHTML = `${bar(0)}<h2>${m.title}</h2>${m.learn.map(c => `<div class="card"><h3>${c.h}</h3><p style="margin:0">${c.p}</p></div>`).join('')}${nav(false, 'Try it →')}`;
+  wire(renderDash, () => { step = 1; render(); });
 }
 
-async function renderTry() {
-  currentStep = 'try';
-  const { prices, tickers } = await api('/api/prices');
-  const content = MODULE_CONTENT[currentModule];
-  app.innerHTML = `
-    <div class="card">
-      ${stepDots('try')}
-      <h2>Build your portfolio</h2>
-      <p class="muted">You have a simulated $10,000. Allocate it across these assets (must total 100%).</p>
-      <div id="alloc-rows"></div>
-      <p class="muted">Total allocated: <span id="alloc-total">0</span>%</p>
-      <label class="muted">Scenario to test against:</label>
-      <select id="scenario-select" style="width:100%;padding:10px;margin:8px 0;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)">
-        ${content.scenarios.map(s => `<option value="${s.id}">${s.label}</option>`).join('')}
-      </select>
-      <button class="btn" id="run-sim" disabled>Run simulation</button>
-      <button class="btn secondary" id="back-learn">Back</button>
-    </div>
-  `;
-  const rows = document.getElementById('alloc-rows');
-  tickers.forEach(t => {
-    const row = h(`<div class="alloc-row">
-      <label>${t}</label>
-      <input type="range" min="0" max="100" value="0" data-ticker="${t}">
-      <span class="pct" data-pct-for="${t}">0%</span>
-    </div>`);
-    rows.appendChild(row);
-  });
-  const totalEl = document.getElementById('alloc-total');
-  const runBtn = document.getElementById('run-sim');
-  function recompute() {
-    let total = 0;
-    rows.querySelectorAll('input[type=range]').forEach(inp => {
-      const v = Number(inp.value);
-      document.querySelector(`[data-pct-for="${inp.getAttribute('data-ticker')}"]`).textContent = v + '%';
-      total += v;
-    });
-    totalEl.textContent = total;
-    runBtn.disabled = total !== 100;
-  }
-  rows.querySelectorAll('input[type=range]').forEach(inp => inp.oninput = recompute);
-  recompute();
-  document.getElementById('back-learn').onclick = renderLearn;
-  runBtn.onclick = async () => {
-    const allocations = {};
-    rows.querySelectorAll('input[type=range]').forEach(inp => { allocations[inp.getAttribute('data-ticker')] = Number(inp.value); });
-    const scenario = document.getElementById('scenario-select').value;
-    lastResult = await api('/api/simulate/diversification', { method: 'POST', body: JSON.stringify({ allocations, scenario }) });
-    renderResults();
-  };
+function renderTry() {
+  const t = M().try; api('/api/simulations', { method: 'POST', body: JSON.stringify({ moduleId: cur, started: true }) }).catch(() => {});
+  ({ sliders: tSliders, allocation: tAlloc, dip: tDip, choices: tChoices })[t.type](t);
+}
+function finish(result) { lastResult = result; api('/api/simulations', { method: 'POST', body: JSON.stringify({ moduleId: cur, result: slim(result) }) }).catch(() => {}); step = 2; render(); }
+const slim = r => JSON.parse(JSON.stringify(r, (k, v) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v)));
+
+function tSliders(t) {
+  const vals = Object.fromEntries(t.controls.map(c => [c.k, (tryState && tryState[c.k]) ?? c.val]));
+  app.innerHTML = `${bar(1)}<h2>${t.title}</h2><p>${t.intro}</p><div class="card">${t.controls.map(c => `<div class="slider-row"><b>${c.label}</b><input type="range" id="s_${c.k}" min="${c.min}" max="${c.max}" step="${c.step}" value="${vals[c.k]}" aria-label="${c.label}"><span class="val" id="v_${c.k}">${c.f(vals[c.k])}</span></div>`).join('')}</div>${nav(true, 'Run it →')}`;
+  t.controls.forEach(c => $('s_' + c.k).oninput = e => { vals[c.k] = Number(e.target.value); $('v_' + c.k).textContent = c.f(vals[c.k]); });
+  wire(() => { step = 0; render(); }, () => { tryState = vals; finish(t.run(vals)); });
+}
+
+function tAlloc(t) {
+  const w = Object.assign({}, (tryState && tryState.w) || t.start), pick = t.scenarios.some(s => s.pick) ? ((tryState && tryState.pick) || t.scenarios[0].id) : null;
+  app.innerHTML = `${bar(1)}<h2>${t.title}</h2><p>${t.intro}</p>${t.note ? `<p class="muted">${t.note}</p>` : ''}
+    <div class="card">${t.assets.map(a => `<div class="slider-row"><b style="${a.c ? 'color:' + a.c : ''}">${a.k}</b><input type="range" id="a_${a.k}" min="0" max="100" step="5" value="${w[a.k] || 0}" aria-label="${a.k} percent"><span class="val" id="p_${a.k}">${w[a.k] || 0}%</span></div>`).join('')}
+    <p class="muted" style="margin:6px 0 0">Total: <b id="tot" class="mono"></b> (needs to be 100%)</p></div>
+    ${pick ? `<label class="q">Test it against:</label><select id="pick">${t.scenarios.map(s => `<option value="${s.id}" ${s.id === pick ? 'selected' : ''}>${s.label}</option>`).join('')}</select>` : ''}${nav(true, 'Run it →', false)}`;
+  const calc = () => { const tot = t.assets.reduce((a, x) => a + (w[x.k] || 0), 0); $('tot').textContent = tot + '%'; $('tot').style.color = tot === 100 ? 'var(--green)' : 'var(--red)'; $('nx').disabled = tot !== 100; };
+  t.assets.forEach(a => $('a_' + a.k).oninput = e => { w[a.k] = Number(e.target.value); $('p_' + a.k).textContent = w[a.k] + '%'; calc(); });
+  calc();
+  wire(() => { step = 0; render(); }, () => { const p = pick ? $('pick').value : null; tryState = { w, pick: p }; finish(t.runAll(w, t.scenarios, p)); });
+}
+
+function tDip(t) {
+  const pts = t.path, W = 600, H = 170, all = pts.concat(t.future), lo = Math.min(...all) - 4, hi = Math.max(...all) + 4;
+  const xy = (v, i, n) => `${(i / (n - 1) * (W - 20) + 10).toFixed(1)},${(H - 12 - (v - lo) / (hi - lo) * (H - 24)).toFixed(1)}`;
+  const n = all.length, line = pts.map((v, i) => xy(v, i, n)).join(' ');
+  app.innerHTML = `${bar(1)}<h2>${t.title}</h2><p>${t.intro}</p>
+    <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Hypothetical index price rising then falling about 23 percent"><polyline fill="none" stroke="#ff5252" stroke-width="2.5" points="${line}"/><circle cx="${xy(pts[pts.length - 1], pts.length - 1, n).split(',')[0]}" cy="${xy(pts[pts.length - 1], pts.length - 1, n).split(',')[1]}" r="5" fill="#ff5252"/></svg>
+    <p class="muted">Your holding: 100 shares at $100 = $10,000 at the start. It is now ${pts[pts.length - 1]}.</p>
+    ${t.choices.map(c => `<button class="opt ${tryState && tryState.c === c.id ? 'sel' : ''}" data-c="${c.id}"><b>${c.label}</b><br><span class="muted">${c.note}</span></button>`).join('')}${nav(true, 'See what happens →', !!(tryState && tryState.c))}`;
+  document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { tryState = { c: b.dataset.c }; document.querySelectorAll('[data-c]').forEach(x => x.classList.toggle('sel', x === b)); $('nx').disabled = false; });
+  wire(() => { step = 0; render(); }, () => { const r = t.run(tryState.c, t.path, t.future); r._path = all; finish(r); });
+}
+
+function tChoices(t) {
+  const ans = (tryState && tryState.a) ? tryState.a.slice() : new Array(t.qs.length).fill(undefined);
+  app.innerHTML = `${bar(1)}<h2>${t.title}</h2><p>${t.intro}</p>${t.qs.map((q, i) => `<div class="card"><h3>${i + 1}. ${q.q}</h3>${q.o.map((o, j) => `<button class="opt ${ans[i] === j ? 'sel' : ''}" data-q="${i}" data-o="${j}">${o.t}</button>`).join('')}</div>`).join('')}${nav(true, 'See my results →', ans.every(a => a !== undefined))}`;
+  document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { const i = +b.dataset.q; ans[i] = +b.dataset.o; document.querySelectorAll(`[data-q="${i}"]`).forEach(x => x.classList.toggle('sel', x === b)); $('nx').disabled = !ans.every(a => a !== undefined); });
+  wire(() => { step = 0; render(); }, () => { tryState = { a: ans }; finish(t.run(ans.map((a, i) => t.qs[i].o[a].b), t)); });
 }
 
 function renderResults() {
-  currentStep = 'results';
-  const r = lastResult;
-  const better = r.portfolioChangePct > r.benchmarkChangePct;
-  app.innerHTML = `
-    <div class="card">
-      ${stepDots('results')}
-      <h2>What happened</h2>
-      <p>Your portfolio moved <strong style="color:${r.portfolioChangePct>=0?'var(--accent)':'var(--danger)'}">${r.portfolioChangePct}%</strong> during this scenario.</p>
-      <p class="muted">An equally-spread benchmark across the same assets moved ${r.benchmarkChangePct}%.</p>
-      <p class="muted">Your largest single position was <strong>${r.largestPositionPct}%</strong> of your portfolio (concentration score: ${r.hhi}, where 1.0 = everything in one asset).</p>
-      <button class="btn" id="to-explain">Explain why →</button>
-    </div>
-  `;
-  document.getElementById('to-explain').onclick = renderExplain;
+  const m = M();
+  app.innerHTML = `${bar(2)}<h2>What happened</h2><div class="card">${m.results(lastResult)}</div>${nav(true, 'Why did that happen? →')}`;
+  wire(() => { step = 1; render(); }, () => { step = 3; render(); });
 }
-
 function renderExplain() {
-  currentStep = 'explain';
-  const r = lastResult;
-  const concentrationNote = r.largestPositionPct >= 50
-    ? `${r.largestPositionPct}% of your portfolio was concentrated in one asset. When that scenario hit, your result was pulled much more heavily toward that single position's outcome than a spread-out portfolio would have been.`
-    : `You kept your largest position under half your portfolio, which is why your result tracked closer to the broader benchmark instead of swinging on one asset's outcome.`;
-  app.innerHTML = `
-    <div class="card">
-      ${stepDots('explain')}
-      <h2>Why this happened</h2>
-      <p>${concentrationNote}</p>
-      <p>This is the core idea of diversification: concentration amplifies whatever happens to the thing you're concentrated in — good or bad. Spreading allocation across assets that don't all move together smooths out the ride, at the cost of also smoothing out your biggest potential wins.</p>
-      <button class="btn" id="to-reflect">Reflect →</button>
-    </div>
-  `;
-  document.getElementById('to-reflect').onclick = renderReflect;
+  const m = M();
+  app.innerHTML = `${bar(3)}<h2>Why this happened</h2><div class="card">${m.explain(lastResult).map(p => `<p>${p}</p>`).join('')}
+    <div class="cite"><b>Sources &amp; further reading</b><br>${m.sources.map(s => `<a href="${s.u}" target="_blank" rel="noopener noreferrer">${esc(s.t)}</a>`).join('<br>')}<br>Scenarios here are hypothetical and rounded for learning; they are not forecasts.</div></div>${nav(true, 'Reflect →')}`;
+  wire(() => { step = 2; render(); }, () => { step = 4; render(); });
 }
-
 function renderReflect() {
-  currentStep = 'reflect';
-  app.innerHTML = `
-    <div class="card">
-      ${stepDots('reflect')}
-      <h2>Quick reflection</h2>
-      <p class="muted">A sentence or two is plenty.</p>
-      <label>What would you change about your allocation next time, and why?</label>
-      <input id="reflect-1" type="text" placeholder="Type your answer…">
-      <label>Was there a moment you wanted to put more into one asset? What held you back or pushed you toward it?</label>
-      <input id="reflect-2" type="text" placeholder="Type your answer…">
-      <button class="btn" id="submit-reflect">Finish module</button>
-    </div>
-  `;
-  document.getElementById('submit-reflect').onclick = async () => {
-    const answers = { q1: document.getElementById('reflect-1').value, q2: document.getElementById('reflect-2').value };
-    await api(`/api/modules/${currentModule}/reflect`, { method: 'POST', body: JSON.stringify({ answers }) });
-    renderDone();
-  };
+  const m = M();
+  app.innerHTML = `${bar(4)}<h2>Quick reflection</h2><p class="muted">A sentence or two is plenty. This is just for you.</p><div class="card">${m.reflect.map((q, i) => `<label class="q" for="r${i}">${q}</label><textarea id="r${i}" maxlength="600"></textarea>`).join('')}</div>${nav(true, 'Finish module ✓')}`;
+  wire(() => { step = 3; render(); }, async () => { $('nx').disabled = true; try { await api(`/api/modules/${cur}/reflect`, { method: 'POST', body: JSON.stringify({ answers: Object.fromEntries(m.reflect.map((_, i) => ['q' + (i + 1), $('r' + i).value.slice(0, 600)])) }) }); renderDone(); } catch (e) { $('nx').disabled = false; alert(e.message); } });
+}
+async function renderDone() {
+  const d = await api('/api/dashboard'), left = d.modules.filter(x => x.userStatus !== 'completed'), nxt = left.find(x => x.id !== cur);
+  app.innerHTML = `<div class="card hl" style="text-align:center;margin-top:30px"><div class="eyebrow">Module complete</div><h2>${M().title} ✓</h2><p class="muted">${d.modulesCompleted} of ${d.modulesTotal} modules done</p><div class="track"><div class="fill" style="width:${d.modulesCompleted / d.modulesTotal * 100}%"></div></div>
+    <div class="row" style="justify-content:center;margin-top:16px">${nxt ? `<button class="btn" id="nm">Next: ${esc(nxt.title)} →</button>` : ''}<button class="btn ghost" id="rt">Try it again</button><button class="btn ghost" id="db">Dashboard</button></div></div>${DISCLAIMER}`;
+  if ($('nm')) $('nm').onclick = () => openModule(nxt.id);
+  $('rt').onclick = () => { step = 1; tryState = null; render(); }; $('db').onclick = renderDash;
 }
 
-function renderDone() {
-  app.innerHTML = `
-    <div class="card">
-      <h2>Module complete 🎉</h2>
-      <p>Nice work. You can retry this module with a different allocation and scenario, or head back to your dashboard.</p>
-      <button class="btn" id="retry-module">Retry this module</button>
-      <button class="btn secondary" id="back-dash2">Back to dashboard</button>
-    </div>
-  `;
-  document.getElementById('retry-module').onclick = () => openModule(currentModule);
-  document.getElementById('back-dash2').onclick = renderDashboard;
-}
-
-// ───────────────────────────────────────────── BOOT
-(async function boot() {
-  try {
-    const data = await api('/api/auth/me');
-    if (data.user) { ME = data.user; renderDashboard(); }
-    else renderAuth();
-  } catch (e) { renderAuth(); }
+// ───────── BOOT
+(async function () {
+  try { CFG = await api('/api/config'); } catch (e) {}
+  try { const d = await api('/api/auth/me'); if (d.user) { ME = d.user; return renderDash(); } } catch (e) {}
+  renderAuth();
 })();

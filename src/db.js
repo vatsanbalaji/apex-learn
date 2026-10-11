@@ -88,4 +88,13 @@ const MODULES = [
 const seedTx = db.transaction((rows) => { for (const r of rows) seedModules.run(...r); });
 seedTx(MODULES);
 
+// Migrations / re-seeds (safe to run every boot)
+try { db.exec("ALTER TABLE users ADD COLUMN google_sub TEXT"); } catch (e) { /* already exists */ }
+try { db.exec("ALTER TABLE users ADD COLUMN is_guest INTEGER DEFAULT 0"); } catch (e) {}
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL");
+db.exec("CREATE TABLE IF NOT EXISTS sessions_store (sid TEXT PRIMARY KEY, sess TEXT NOT NULL, expires INTEGER NOT NULL)");
+db.prepare("UPDATE modules SET status = 'available'").run();
+const SUMMARIES = {'investing-basics':'What investing is, and how compounding makes time your biggest advantage.','risk-and-return':'Why higher potential growth comes with bigger swings.','diversification':'Spread your money so no single bet can sink you.','market-volatility':'Why prices drop, and why your reaction matters most.','behavioral-biases':'The predictable mental traps that trip up smart investors.','long-term-investing':'The real cost of waiting, and why consistency wins.'};
+for (const [id, s] of Object.entries(SUMMARIES)) db.prepare('UPDATE modules SET summary = ? WHERE id = ?').run(s, id); // all six modules now have content
+
 module.exports = db;

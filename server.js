@@ -13,6 +13,12 @@ const db = require('./src/db');
 const { createUser, verifyUser, requireAuth } = require('./src/auth');
 const { getPrices, getTickers } = require('./src/market-data');
 const events = require('./src/events');
+const SqliteStore = require('./src/session-store');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+let googleClient = null;
+if (GOOGLE_CLIENT_ID) { const { OAuth2Client } = require('google-auth-library'); googleClient = new OAuth2Client(GOOGLE_CLIENT_ID); }
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '8081');
@@ -22,6 +28,7 @@ if (IS_PROD) app.set('trust proxy', 1); // behind Render's proxy so secure cooki
 app.use(compression());
 app.use(express.json({ limit: '256kb' }));
 app.use(session({
+  store: new SqliteStore(),
   secret: (() => { if (IS_PROD && !process.env.SESSION_SECRET) { console.error('SESSION_SECRET must be set in production'); process.exit(1); } return process.env.SESSION_SECRET || 'dev-only-secret-change-me'; })(),
   resave: false,
   saveUninitialized: false,
@@ -61,8 +68,8 @@ app.post('/api/auth/logout', (req, res) => { req.session.destroy(() => res.json(
 
 app.get('/api/auth/me', (req, res) => {
   if (!req.session.userId) return res.json({ user: null });
-  const user = db.prepare('SELECT id, email, display_name FROM users WHERE id = ?').get(req.session.userId);
-  res.json({ user: user ? { id: user.id, email: user.email, displayName: user.display_name } : null });
+  const user = db.prepare('SELECT id, email, display_name, is_guest FROM users WHERE id = ?').get(req.session.userId);
+  res.json({ user: user ? { id: user.id, email: user.is_guest ? null : user.email, displayName: user.display_name, guest: !!user.is_guest } : null });
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -83,7 +90,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
   const completedCount = progress.filter(p => p.status === 'completed').length;
   const simCount = db.prepare('SELECT COUNT(*) c FROM simulations WHERE user_id = ?').get(userId).c;
   res.json({
-    modules: modules.map(m => ({ id: m.id, title: m.title, status: m.status, userStatus: progressMap[m.id] || 'not_started' })),
+    modules: modules.map(m => ({ id: m.id, title: m.title, summary: m.summary, status: m.status, userStatus: progressMap[m.id] || 'not_started' })),
     modulesCompleted: completedCount,
     modulesTotal: modules.length,
     simulationsCompleted: simCount,
@@ -125,60 +132,56 @@ app.get('/api/prices', requireAuth, (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// SIMULATION: Diversification module
-// Client builds a portfolio allocation across the teaching universe, then
-// asks the server to "run" one simulated market move and score the result.
-// This is a self-contained teaching simulation, NOT the research trading
-// engine's session/trade/order-book model -- much simpler on purpose.
+// SIMULATIONS: the client engine runs each module's (deterministic,
+// labeled-illustrative) simulation; the server records a small summary.
 // ─────────────────────────────────────────────────────────────────────────
-app.post('/api/simulate/diversification', requireAuth, (req, res) => {
-  const { allocations, scenario } = req.body || {}; // allocations: { TICKER: percent }
-  if (!allocations || typeof allocations !== 'object') return res.status(400).json({ error: 'Invalid allocations' });
-  const totalPct = Object.values(allocations).reduce((s, v) => s + (Number(v) || 0), 0);
-  if (Math.abs(totalPct - 100) > 1) return res.status(400).json({ error: 'Allocations must sum to 100%.' });
+app.post('/api/simulations', requireAuth, (req, res) => {
+  const { moduleId, result, started } = req.body || {};
+  const mod = db.prepare('SELECT id FROM modules WHERE id = ?').get(moduleId);
+  if (!mod) return res.status(404).json({ error: 'Module not found' });
+  if (started) { events.log(req.session.userId, 'simulation_started', { moduleId }); return res.json({ ok: true }); }
+  const json = JSON.stringify(result || {});
+  if (json.length > 4096) return res.status(413).json({ error: 'Result too large' });
+  db.prepare('INSERT INTO simulations (user_id, module_id, result_json) VALUES (?, ?, ?)').run(req.session.userId, moduleId, json);
+  events.log(req.session.userId, 'simulation_completed', { moduleId });
+  res.json({ ok: true });
+});
 
-  events.log(req.session.userId, 'simulation_started', { moduleId: 'diversification' });
+// ─────────────────────────────────────────────────────────────────────────
+// GOOGLE SIGN-IN + GUEST MODE
+// ─────────────────────────────────────────────────────────────────────────
+app.get('/api/config', (req, res) => res.json({ googleClientId: GOOGLE_CLIENT_ID || null }));
 
-  // Pre-defined, labeled teaching scenarios (not live price prediction --
-  // this is an educational simulation, not a real forecasting tool).
-  const SCENARIOS = {
-    tech_selloff: { AAPL: -18, MSFT: -15, NVDA: -28, SPY: -6, VTI: -6, TLT: 4, GLD: 5, XLE: 2, SOXL: -55 },
-    energy_shock: { AAPL: -2, MSFT: -1, NVDA: -3, SPY: -2, VTI: -2, TLT: 1, GLD: 3, XLE: 22, SOXL: -6 },
-    broad_rally: { AAPL: 8, MSFT: 7, NVDA: 14, SPY: 5, VTI: 5, TLT: -2, GLD: -1, XLE: 4, SOXL: 30 },
-  };
-  const moves = SCENARIOS[scenario] || SCENARIOS.tech_selloff;
+app.post('/api/auth/google', async (req, res) => {
+  if (!googleClient) return res.status(503).json({ error: 'Google sign-in is not configured.' });
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken: String((req.body || {}).credential || ''), audience: GOOGLE_CLIENT_ID });
+    const p = ticket.getPayload();
+    if (!p || !p.sub || !p.email_verified) return res.status(401).json({ error: 'Google account not verified.' });
+    let user = db.prepare('SELECT * FROM users WHERE google_sub = ?').get(p.sub);
+    if (!user) {
+      user = db.prepare('SELECT * FROM users WHERE email = ?').get(p.email.toLowerCase());
+      if (user) db.prepare('UPDATE users SET google_sub = ? WHERE id = ?').run(p.sub, user.id);
+      else {
+        const hash = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 8);
+        const info = db.prepare('INSERT INTO users (email, password_hash, display_name, google_sub) VALUES (?, ?, ?, ?)').run(p.email.toLowerCase(), hash, p.given_name || p.name || null, p.sub);
+        user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+        events.log(user.id, 'account_created', { via: 'google' });
+      }
+    }
+    req.session.userId = user.id;
+    events.log(user.id, 'user_returned', { via: 'google' });
+    res.json({ ok: true, user: { id: user.id, email: user.email, displayName: user.display_name } });
+  } catch (e) { console.warn('[google auth]', e.message); res.status(401).json({ error: 'Google sign-in failed.' }); }
+});
 
-  let portfolioChangePct = 0;
-  const breakdown = [];
-  for (const [ticker, pct] of Object.entries(allocations)) {
-    const weight = (Number(pct) || 0) / 100;
-    const move = moves[ticker] ?? 0;
-    portfolioChangePct += weight * move;
-    breakdown.push({ ticker, weight: Number(pct), move, contribution: weight * move });
-  }
-
-  // Concentration measure: Herfindahl-Hirschman Index on allocation weights (0-1 scale, 0=perfectly spread, 1=all-in-one)
-  const hhi = Object.values(allocations).reduce((s, v) => s + Math.pow((Number(v) || 0) / 100, 2), 0);
-  const largestPosition = Math.max(...Object.values(allocations).map(v => Number(v) || 0));
-
-  // A simple equally-weighted benchmark across the same universe, for comparison
-  const tickers = Object.keys(moves);
-  const benchmarkChangePct = tickers.reduce((s, t) => s + moves[t], 0) / tickers.length;
-
-  const result = {
-    scenario: scenario || 'tech_selloff',
-    portfolioChangePct: Math.round(portfolioChangePct * 100) / 100,
-    benchmarkChangePct: Math.round(benchmarkChangePct * 100) / 100,
-    hhi: Math.round(hhi * 1000) / 1000,
-    largestPositionPct: largestPosition,
-    breakdown,
-  };
-
-  db.prepare('INSERT INTO simulations (user_id, module_id, result_json) VALUES (?, ?, ?)')
-    .run(req.session.userId, 'diversification', JSON.stringify(result));
-  events.log(req.session.userId, 'simulation_completed', { moduleId: 'diversification', scenario: result.scenario });
-
-  res.json(result);
+app.post('/api/auth/guest', (req, res) => {
+  const tag = crypto.randomBytes(6).toString('hex');
+  const hash = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 8);
+  const info = db.prepare('INSERT INTO users (email, password_hash, display_name, is_guest) VALUES (?, ?, ?, 1)').run(`guest-${tag}@guest.local`, hash, 'Guest');
+  req.session.userId = info.lastInsertRowid;
+  events.log(info.lastInsertRowid, 'account_created', { via: 'guest' });
+  res.json({ ok: true, user: { id: info.lastInsertRowid, email: null, displayName: 'Guest' } });
 });
 
 // ─────────────────────────────────────────────────────────────────────────
